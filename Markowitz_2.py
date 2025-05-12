@@ -46,45 +46,47 @@ Create your own strategy, you can add parameter but please remain "price" and "e
 
 
 class MyPortfolio:
-    """
-    NOTE: You can modify the initialization function
-    """
 
-    def __init__(self, price, exclude, lookback=50, gamma=0):
+    def __init__(self, price, exclude, lookback=50):
         self.price = price
         self.returns = price.pct_change().fillna(0)
         self.exclude = exclude
         self.lookback = lookback
-        self.gamma = gamma
 
     def calculate_weights(self):
-        # Get the assets by excluding the specified column
-        assets = self.price.columns[self.price.columns != self.exclude]
+        assets = list(self.price.columns[self.price.columns != self.exclude])
+        n = len(assets)
 
-        # Calculate the portfolio weights
-        self.portfolio_weights = pd.DataFrame(
-            index=self.price.index, columns=self.price.columns
-        )
+        self.portfolio_weights = pd.DataFrame(0.0, index=self.price.index, columns=self.price.columns)
 
-        """
-        TODO: Complete Task 4 Below
-        """
+        eq_w = 1.0 / n
+        self.portfolio_weights.loc[self.price.index[: self.lookback + 1], assets] = eq_w
 
-        """
-        TODO: Complete Task 4 Above
-        """
+        for i in range(self.lookback + 1, len(self.price)):
+            past_prices = self.price[assets].iloc[i - self.lookback : i + 1]
+            momentum = past_prices.iloc[-1] / past_prices.iloc[0] - 1.0
+
+            k = max(1, n // 2)
+            pick = momentum.nlargest(k).index
+
+            raw = momentum[pick].clip(lower=0)
+            if raw.sum() > 0:
+                w_sel = raw.values / raw.sum()
+            else:
+                w_sel = np.ones(k) / k
+
+            row = pd.Series(0.0, index=self.price.columns)
+            row[pick] = w_sel
+            self.portfolio_weights.iloc[i] = row.values
 
         self.portfolio_weights.ffill(inplace=True)
-        self.portfolio_weights.fillna(0, inplace=True)
+        self.portfolio_weights.fillna(0.0, inplace=True)
 
     def calculate_portfolio_returns(self):
-        # Ensure weights are calculated
         if not hasattr(self, "portfolio_weights"):
             self.calculate_weights()
-
-        # Calculate the portfolio returns
-        self.portfolio_returns = self.returns.copy()
         assets = self.price.columns[self.price.columns != self.exclude]
+        self.portfolio_returns = self.returns.copy()
         self.portfolio_returns["Portfolio"] = (
             self.portfolio_returns[assets]
             .mul(self.portfolio_weights[assets])
@@ -92,10 +94,8 @@ class MyPortfolio:
         )
 
     def get_results(self):
-        # Ensure portfolio returns are calculated
         if not hasattr(self, "portfolio_returns"):
             self.calculate_portfolio_returns()
-
         return self.portfolio_weights, self.portfolio_returns
 
 
